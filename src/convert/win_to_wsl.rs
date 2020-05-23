@@ -1,5 +1,5 @@
 use crate::convert::Slash;
-use std::ffi::OsString;
+use std::ffi::{OsString, OsStr};
 use std::path::{PathBuf, Path};
 use std::process::{Command, Output};
 use std::{io, env};
@@ -7,6 +7,7 @@ use thiserror::Error;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
+use crate::convert::win_to_wsl::decode::IllegalFileNameCharError;
 
 #[derive(Error, Debug)]
 #[error("Windows environment variable lookup failed for {var}")]
@@ -158,30 +159,161 @@ impl Converter {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum ConvertError {
-    #[error("parse error")]
-    Parse,
-}
-
-impl Converter {
-    
+impl Slash {
     /// convert path sep to to posix path sep
     /// if we're accepting / as the Windows sep, then do nothing
     /// if we're accepting \ as the Windows sep, need to replace them w/ /
     fn convert_sep(&self, path: &mut [u8]) {
-        match self.options.sep {
-            Slash::Forward => {} // already all /,
-            Slash::Backward => {
+        use Slash::*;
+        match self {
+            Forward => {} // already all /,
+            Backward => {
                 for c in path {
-                    if *c == Slash::Backward.value() {
-                        *c = Slash::Forward.value();
+                    if *c == Backward.value() {
+                        *c = Forward.value();
                     }
                 }
             },
         }
     }
+}
+
+mod decode {
+    use optional::Optioned;
+    use crate::convert::Slash;
+    use thiserror::Error;
     
+    #[derive(Debug, Eq, PartialEq)]
+    pub enum FileNameCharType {
+        Null,
+        Low,
+        Reserved,
+        Slash,
+        BackSlash,
+        Legal,
+    }
+    
+    impl From<u8> for FileNameCharType {
+        fn from(c: u8) -> Self {
+            use FileNameCharType::*;
+            match c {
+                0 => Null,
+                _ if c > 0 && c < b' ' => Low,
+                b'/' => Slash,
+                b'\\' => BackSlash,
+                b'"' | b'*' | b':' | b'<' | b'>' | b'?' | b'|' => Reserved,
+                _ => Legal,
+            }
+        }
+    }
+    
+    impl From<&Slash> for FileNameCharType {
+        fn from(slash: &Slash) -> Self {
+            use Slash::*;
+            match slash {
+                Forward => FileNameCharType::Slash,
+                Backward => FileNameCharType::BackSlash,
+            }
+        }
+    }
+    
+    #[derive(Error, Debug)]
+    #[error("illegal windows filename char: {char:?} of type {char_type:?}")]
+    pub struct IllegalFileNameCharError {
+        char: char,
+        char_type: FileNameCharType,
+    }
+    
+    fn check_char(c: u8) -> Result<u8, IllegalFileNameCharError> {
+        use FileNameCharType::*;
+        let char_type: FileNameCharType = c.into();
+        match char_type {
+            Legal | Slash => Ok(c),
+            _ => Err(IllegalFileNameCharError {
+                char: c as char,
+                char_type,
+            }),
+        }
+    }
+    
+    fn check_path(path: &[u8]) -> Result<(), IllegalFileNameCharError> {
+        for c in path {
+            check_char(*c)?;
+        }
+        Ok(())
+    }
+    
+    /// decode a Windows WSL path codepoint
+    /// illegal windows filename chars are encoded as UTF-8
+    /// see `encoding.py`
+    /// illegal chars `c` are encoded as `'\f000' + c`
+    /// `'\f000'` is 3-bytes, so (a, b, c)
+    /// TODO check assembly for Optioned::<u8>
+    pub fn codepoint(codepoint: [u8; 3]) -> Optioned::<u8> {
+        let [a, b, c] = codepoint;
+        use FileNameCharType::*;
+        let none = Optioned::none();
+        if a != 239 {
+            return none;
+        }
+        match b {
+            128 => {
+                let d = c - 128;
+                match FileNameCharType::from(d) {
+                    Low | Reserved => Optioned::some(d),
+                    _ => none,
+                }
+            },
+            129 => {
+                let d = c - 64;
+                match FileNameCharType::from(d) {
+                    Reserved | BackSlash => Optioned::some(d),
+                    _ => none,
+                }
+            },
+            _ => none,
+        }
+    }
+    
+    /// decode a Windows WSL path
+    /// buf should be pre-reserved by path.len() here
+    pub fn path(path: &[u8], buf: &mut Vec<u8>) -> Result<(), IllegalFileNameCharError> {
+        check_path(path)?;
+        // we're decoding multi-byte codepoints to bytes, so this is an overestimate
+        buf.reserve(path.len());
+        let mut i = 0;
+        while i + 2 < path.len() {
+            // '\f000' is 3-bytes
+            let a = path[i + 0];
+            let b = path[i + 1];
+            let c = path[i + 2];
+            let d= match codepoint([a, b, c]).into_option() {
+                Some(d) => {
+                    i += 3;
+                    d
+                },
+                None => {
+                    i += 1;
+                    a
+                },
+            };
+            buf.push(d);
+        }
+        buf.extend_from_slice(&path[i..]);
+        Ok(())
+    }
+    
+}
+
+#[derive(Error, Debug)]
+pub enum ConvertError {
+    #[error("parse error")]
+    Parse,
+    #[error(transparent)]
+    IllegalFileNameChar(#[from] IllegalFileNameCharError),
+}
+
+impl Converter {
     fn try_fix_root_loop<'a>(&self, path: &'a [u8]) -> Option<&'a [u8]> {
         let root = self
             .root
@@ -210,7 +342,7 @@ impl Converter {
     /// assuming the posix path sep / is used
     /// and not fixing root loops
     /// i.e., only convert prefix
-    fn raw_convert(&self, path: &[u8]) -> Result<Vec<u8>, ConvertError> {
+    fn raw_convert(&self, path: &[u8], buf: &mut Vec<u8>) -> Result<(), ConvertError> {
         let verbatim = b"//?/";
         let path = if path.starts_with(verbatim) {
             &path[verbatim.len()..]
@@ -218,23 +350,33 @@ impl Converter {
             path
         };
         let unc_root = self.root.unc.as_bytes();
-        let path = match path {
+        match path {
             _ if path.starts_with(unc_root) => {
-                path[unc_root.len()..].to_vec()
+                let path = &path[unc_root.len()..];
+                buf.reserve(path.len());
+                decode::path(path, buf)?;
             }
             [drive, b':', b'/', path @ ..] => {
                 let path = self.fix_root_loop(path);
                 let len = path.len() + (b"/mnt/c".len() - b"C:".len());
-                let mut new_path = Vec::with_capacity(len);
-                new_path.extend_from_slice(b"/mnt/");
-                new_path.push(drive.to_ascii_lowercase());
-                new_path.push(b'/');
-                new_path.extend_from_slice(path);
-                new_path
+                buf.reserve(len);
+                buf.extend_from_slice(b"/mnt/");
+                buf.push(drive.to_ascii_lowercase());
+                buf.push(b'/');
+                decode::path(path, buf)?;
             },
             _ => return Err(ConvertError::Parse),
         };
-        Ok(path)
+        Ok(())
+    }
+    
+    pub fn convert_into_buf(&self, path: OsString, buf: &mut Vec<u8>) -> Result<(), ConvertError> {
+        let mut path = path.into_vec();
+        // dbg!(&OsStr::from_bytes(path.as_slice()));
+        self.options.sep.convert_sep(path.as_mut_slice());
+        // dbg!(&OsStr::from_bytes(path.as_slice()));
+        self.raw_convert(path.as_slice(), buf)?;
+        Ok(())
     }
     
     /// Convert an absolute Windows path to an absolute WSL path.
@@ -248,11 +390,9 @@ impl Converter {
     /// An [`OsString`] is taken instead of an [`&OsStr`] b/c it may be modified in-place,
     /// so this can eliminate an unnecessary copy.
     pub fn convert(&self, path: OsString) -> Result<PathBuf, ConvertError> {
-        let mut path = path.into_vec();
-        self.convert_sep(path.as_mut_slice());
-        let mut path = self.raw_convert(path.as_slice())?;
-        self.fix_root_loop(&mut path);
-        Ok(path)
+        let mut buf = Vec::new();
+        self.convert_into_buf(path, &mut buf)?;
+        Ok(buf)
             .map(OsString::from_vec)
             .map(PathBuf::from)
     }

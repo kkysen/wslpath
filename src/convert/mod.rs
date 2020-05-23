@@ -3,6 +3,7 @@ pub mod wsl_to_win;
 
 // Works in WSL only
 
+#[derive(Clone, Copy)]
 pub enum Slash {
     Forward,
     Backward,
@@ -16,9 +17,10 @@ impl Default for Slash {
 
 impl Slash {
     pub fn value(&self) -> u8 {
+        use Slash::*;
         match self {
-            Slash::Forward => b'/',
-            Slash::Backward => b'\\',
+            Forward => b'/',
+            Backward => b'\\',
         }
     }
 }

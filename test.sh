@@ -8,6 +8,9 @@ testPath() {
     local myWslPath=$(./target/debug/wslpath "${winPath}")
     if [[ "${myWslPath}" != "${wslPath}" ]]; then
         echo "${myWslPath} != ${wslPath}"
+        if [[ ${#myWslPath} -ne ${#wslPath} ]]; then
+            echo "${#myWslPath} != ${#wslPath}"
+        fi
         return 1
     fi
 }
@@ -17,6 +20,8 @@ testAllPaths() {
 }
 
 test() {
+    cargo build || return 1
+
     testPath . || return 1
     testPath ~ || return 1
     testPath / || return 1

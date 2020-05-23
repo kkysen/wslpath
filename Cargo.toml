@@ -18,6 +18,7 @@ paw = "1.0.0"
 thiserror = "1.0.19"
 anyhow = "1.0.31"
 print_bytes = "0.2.0"
+optional = "0.5.0"
 
 [profile.release]
 lto = true
