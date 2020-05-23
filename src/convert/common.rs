@@ -1,5 +1,6 @@
 use std::env;
 use std::ffi::OsString;
+use std::os::unix::ffi::OsStringExt;
 
 pub fn get_wsl_distro_name() -> Option<OsString> {
     env::var_os("WSL_DISTRO_NAME")

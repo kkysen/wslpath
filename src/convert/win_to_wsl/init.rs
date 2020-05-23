@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 use std::path::{PathBuf, Path};
-use std::{io, env};
+use std::io;
 use std::process::{Command, Output};
 use crate::convert::Slash;
 use std::os::unix::ffi::OsStringExt;
