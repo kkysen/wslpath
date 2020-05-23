@@ -2,7 +2,6 @@ use std::ffi::OsString;
 use structopt::StructOpt;
 use wslpath::convert::win_to_wsl;
 use wslpath::convert::win_to_wsl::Options;
-use std::error::Error;
 
 // #[derive(StructOpt, Debug)]
 // struct Args {
@@ -54,8 +53,8 @@ struct Args {
 }
 
 #[paw::main]
-fn main(args: Args) -> Result<(), Box<dyn Error>> {
-    println!("{:#?}", args);
+fn main(args: Args) -> Result<(), anyhow::Error> {
+    // println!("{:#?}", args);
     let converter = win_to_wsl::Converter::new(Options {
         ..Default::default()
     })?;

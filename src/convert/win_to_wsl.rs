@@ -1,12 +1,12 @@
 use crate::convert::Slash;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::process::{Command, Output};
 use std::{io, env};
-use same_file::Handle;
 use thiserror::Error;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
 
 #[derive(Error, Debug)]
 #[error("Windows environment variable lookup failed for {var}")]
@@ -60,7 +60,7 @@ fn get_unc_root() -> Result<OsString, ConvertOptionsError> {
 }
 
 fn get_windows_env_var(var: &str) -> Result<OsString, WindowsEnvVarError> {
-    let win_cmd = format!("echo \"%{}%\"", var);
+    let win_cmd = format!("echo %{}%", var);
     let output = Command::new("cmd.exe")
         .args(&["/c", win_cmd.as_str()])
         .output()
@@ -82,7 +82,10 @@ fn get_windows_env_var(var: &str) -> Result<OsString, WindowsEnvVarError> {
 
 fn get_windows_store_root() -> Result<PathBuf, WindowsStoreRootLookupError> {
     use WindowsStoreRootLookupError::{LocalAppDataNotFound, IoError};
-    let root_handle = Handle::from_path("/").map_err(IoError)?;
+    let root_inode = Path::new("/")
+        .metadata()
+        .map_err(IoError)?
+        .ino();
     let app_data_local = {
         let username = get_windows_env_var("USERNAME")?;
         let mut path = PathBuf::from("/mnt/c/Users");
@@ -90,12 +93,12 @@ fn get_windows_store_root() -> Result<PathBuf, WindowsStoreRootLookupError> {
         path.push("AppData/Local/Packages");
         path
     };
-    // rootfs/ under /mnt/c/ has the same inode as / in WSL
+    // rootfs/ under /mnt/c/ has the same inode as / in WSL, but different device
     for entry in app_data_local.read_dir().map_err(LocalAppDataNotFound)? {
         let mut path = entry.map_err(IoError)?.path();
         path.push("LocalState/rootfs");
-        if let Ok(handle) = Handle::from_path(path.as_path()) {
-            if root_handle == handle {
+        if let Ok(metadata) = path.metadata() {
+            if root_inode == metadata.ino() {
                 return Ok(path);
             }
         }
@@ -221,7 +224,7 @@ impl Converter {
             }
             [drive, b':', b'/', path @ ..] => {
                 let path = self.fix_root_loop(path);
-                let len = path.len() - b"C:".len() + b"/mnt/c".len();
+                let len = path.len() + (b"/mnt/c".len() - b"C:".len());
                 let mut new_path = Vec::with_capacity(len);
                 new_path.extend_from_slice(b"/mnt/");
                 new_path.push(drive.to_ascii_lowercase());
