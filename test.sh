@@ -16,4 +16,24 @@ testAllPaths() {
     locate | map testPath
 }
 
-testAllPaths "${@}"
+test() {
+    testPath . || return 1
+    testPath ~ || return 1
+    testPath / || return 1
+    testPath .. || return 1
+    testPath ./target/debug/wslpath || return 1
+
+    # test illegal Windows filename chars like ':'
+    testPath ~/perl5/man/man3/local::lib.3pm || return 1
+#    testPath ~/perl5/man/man3/locallib.3pm || return 1
+
+    testAllPaths || return 1
+}
+
+if test "${@}"; then
+    echo
+    >&2 echo PASS
+else
+    echo
+    >&2 echo FAIL
+fi
