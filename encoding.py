@@ -6,4 +6,6 @@ def wslpath(s: str) -> str:
 
 s = "\0" + wslpath("".join(chr(i) for i in range(1, 256)))
 
-[(i, ord(s[i]), ord(s[i]) - ord('\uf000'), chr(i), s[i], s[i].encode()) for i in range(1, 256) if chr(i) != s[i]
+a = [(i, ord(s[i]), ord(s[i]) - ord('\uf000'), chr(i), s[i], s[i].encode()) for i in range(1, 256) if chr(i) != s[i]
+
+print(a)
