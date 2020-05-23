@@ -2,6 +2,7 @@ use std::ffi::OsString;
 use structopt::StructOpt;
 use wslpath::convert::win_to_wsl;
 use wslpath::convert::win_to_wsl::Options;
+use print_bytes::println_bytes;
 
 // #[derive(StructOpt, Debug)]
 // struct Args {
@@ -60,7 +61,7 @@ fn main(args: Args) -> Result<(), anyhow::Error> {
     })?;
     for path in args.paths {
         let path = converter.convert(path)?;
-        println!("{:#?}", path);
+        println_bytes(path.as_path());
     }
     Ok(())
 }
