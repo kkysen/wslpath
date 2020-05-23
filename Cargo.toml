@@ -12,3 +12,14 @@ homepage = "https://github.com/kkysen/wslpath/blob/master/README.md"
 
 [dependencies]
 itertools = "0.8.0"
+clap = "2.33.0"
+structopt = {version = "0.3.14", features = ["paw"]}
+paw = "1.0.0"
+same-file = "1.0.6"
+thiserror = "1.0.19"
+anyhow = "1.0.31"
+
+[profile.release]
+lto = true
+panic = "abort"
+opt-level = "z"
