@@ -2,12 +2,13 @@ use std::ffi::OsString;
 use std::path::{PathBuf, Path};
 use std::io;
 use std::process::{Command, Output};
-use crate::convert::Slash;
+use crate::convert::WindowsPathSep;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::MetadataExt;
 use thiserror::Error;
 use crate::convert::win_to_wsl::Converter;
-use crate::convert::common::get_unc_root;
+use crate::convert::wsl::get_unc_root;
+use crate::convert::path_sep::WindowsPathSep;
 
 #[derive(Error, Debug)]
 #[error("Windows environment variable lookup failed for {var}")]
@@ -94,14 +95,14 @@ fn get_windows_store_root() -> Result<PathBuf, WindowsStoreRootLookupError> {
 
 pub struct Options {
     pub convert_root_loop: bool,
-    pub sep: Slash,
+    pub sep: WindowsPathSep,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
             convert_root_loop: true,
-            sep: Slash::default(),
+            sep: WindowsPathSep::default(),
         }
     }
 }
@@ -112,7 +113,7 @@ pub struct Root {
 }
 
 impl Root {
-    fn new(options: &Options) -> Result<Self, ConvertOptionsError> {
+    pub fn new(options: &Options) -> Result<Self, ConvertOptionsError> {
         Ok(Self {
             unc: get_unc_root().ok_or(ConvertOptionsError::NotWsl)?,
             windows_store: match options.convert_root_loop {
@@ -125,16 +126,6 @@ impl Root {
                 }
                 false => None,
             },
-        })
-    }
-}
-
-impl Converter {
-    pub fn new(options: Options) -> Result<Self, ConvertOptionsError> {
-        let root = Root::new(&options)?;
-        Ok(Self {
-            options,
-            root,
         })
     }
 }
