@@ -4,7 +4,6 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::{Debug, Display, Formatter};
 use std::fs::File;
 use std::io::Read;
-use std::os::unix::ffi::OsStrExt;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
@@ -58,14 +57,14 @@ pub struct PathSeparators<InputSep, OutputSep>
 #[derive(Error, Debug)]
 pub struct OneConvertError<E: std::error::Error + 'static> {
     index: usize,
-    path: Vec<u8>,
+    path: OsString,
     source: E,
 }
 
 impl<E: std::error::Error + 'static> Display for OneConvertError<E> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "error converting {:#?} at index {}: {:#?}",
-               OsStr::from_bytes(self.path.as_slice()),
+               self.path,
                self.index,
                self.source,
         )?;
@@ -127,12 +126,14 @@ pub trait Converter where Self: Sized {
         where InputSep: InputPathSeparator,
               OutputSep: OutputPathSeparator {
         let empty = BulkConversion::default();
+        
         // if paths is empty, do nothing
         let last_byte = match paths.last() {
             // empty slice
             None => return empty,
             Some(c) => *c,
         };
+
         // if paths doesn't end in an input_sep,
         // truncate paths from the end until it does end in an input_sep
         // also store the remainder to return
@@ -155,14 +156,14 @@ pub trait Converter where Self: Sized {
             .split_mut(|c| seps.input.matches(*c))
             .filter(|it| !it.is_empty())
             .enumerate() {
-            // if index % 100000 == 0 {
-            //     dbg!(index);
-            // }
+            if index % 1000000 == 0 {
+                dbg!(index);
+            }
             let result = self.convert_into_buf(path, &mut buf);
             if let Err(source) = result {
                 errors.push(OneConvertError {
                     index,
-                    path: path.into(),
+                    path: OsString::from_vec(path.into()),
                     source,
                 });
             }

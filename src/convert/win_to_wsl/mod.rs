@@ -84,7 +84,12 @@ impl Converter {
                 let path = &path[unc_root.len()..];
                 buf.reserve(path.len());
                 decode::path(path, buf)?;
-            }
+            },
+            [drive, b':'] => {
+                buf.reserve("/mnt/c".len());
+                buf.extend_from_slice(b"/mnt/");
+                buf.push(drive.to_ascii_lowercase());
+            },
             [drive, b':', b'/', path @ ..] => {
                 let path = self.fix_root_loop(path);
                 let len = path.len() + (b"/mnt/c".len() - b"C:".len());
@@ -93,7 +98,7 @@ impl Converter {
                 buf.push(drive.to_ascii_lowercase());
                 buf.push(b'/');
                 decode::path(path, buf)?;
-            }
+            },
             _ => return Err(ConvertError::Parse),
         };
         Ok(())

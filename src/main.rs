@@ -54,10 +54,6 @@ fn print_converted<C: Converter>(converted: &BulkConversion<C>, source_path: Opt
 }
 
 fn run<C: Converter>(args: Args, converter: C) {
-    let seps = PathSeparators {
-        input: args.read_line_sep,
-        output: args.write_line_sep,
-    };
     if !args.from_files {
         let mut paths = args.paths
             .into_iter()
@@ -66,9 +62,17 @@ fn run<C: Converter>(args: Args, converter: C) {
             .flat_map(|it| it.into_iter())
             .collect_vec();
         paths.push(0); // trailing delimiter
+        let seps = PathSeparators {
+            input: LineSep::Null,
+            output: args.write_line_sep,
+        };
         let converted = converter.convert_all(paths.as_mut_slice(), &seps);
         print_converted(&converted, Some(Path::new("args")), &args.write_line_sep);
     } else {
+        let seps = PathSeparators {
+            input: args.read_line_sep,
+            output: args.write_line_sep,
+        };
         let stdin_path = "/proc/self/fd/0"; // /proc/self/fd/0 is more portable than /dev/stdin
         let default_paths = [stdin_path.into()];
         let (errors, files): (Vec<_>, Vec<_>) = match args.paths.as_slice() {
