@@ -1,6 +1,8 @@
 use std::convert::{TryFrom, TryInto};
+use crate::util::enum_arg::EnumArg;
 use std::fmt::{Display, Formatter};
 use std::fmt;
+use std::str::FromStr;
 
 #[derive(Clone, Copy, Debug)]
 pub enum WindowsPathSep {
@@ -8,15 +10,8 @@ pub enum WindowsPathSep {
     BackSlash,
 }
 
-impl Default for WindowsPathSep {
-    fn default() -> Self {
-        use WindowsPathSep::*;
-        BackSlash
-    }
-}
-
-impl Into<u8> for WindowsPathSep {
-    fn into(self) -> u8 {
+impl WindowsPathSep {
+    pub fn value(&self) -> u8 {
         use WindowsPathSep::*;
         match self {
             Slash => b'/',
@@ -47,23 +42,38 @@ impl TryFrom<u8> for WindowsPathSep {
     }
 }
 
-impl TryFrom<&str> for WindowsPathSep {
-    type Error = ();
-    
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
+impl EnumArg for WindowsPathSep {
+    fn variants() -> &'static [Self] {
         use WindowsPathSep::*;
-        let this = match s {
-            r"/" => Slash,
-            r"\" => BackSlash,
-            _ => return Err(()),
-        };
-        Ok(this)
+        &[Slash, BackSlash]
+    }
+    
+    fn displays(&self) -> &'static [&'static str] {
+        use WindowsPathSep::*;
+        match self {
+            Slash => &["/"],
+            BackSlash => &[r"\"],
+        }
     }
 }
 
 impl Display for WindowsPathSep {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.into() as u8);
-        Ok(())
+        EnumArg::fmt(self, f)
+    }
+}
+
+impl FromStr for WindowsPathSep {
+    type Err = String;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        EnumArg::from_str(s)
+    }
+}
+
+impl Default for WindowsPathSep {
+    fn default() -> Self {
+        use WindowsPathSep::*;
+        BackSlash
     }
 }

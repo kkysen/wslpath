@@ -1,24 +1,22 @@
 use std::ffi::OsString;
-use structopt::StructOpt;
-use wslpath::convert::{win_to_wsl, WindowsPathSep, Converter, wsl_to_win, InputPathSeparator, BulkConversion};
-use print_bytes::println_bytes;
-use std::convert::TryFrom;
-use std::fmt::{Display, Formatter};
-use std::{fmt, fs, io};
-use wslpath::convert::path_sep::WindowsPathSep;
-use wslpath::convert::line_sep::LineSep;
-use itertools::{Itertools, Either};
-use print_bytes::{print_bytes, eprintln_bytes};
 use std::path::Path;
-use std::fs::File;
-use anyhow::bail;
+use std::os::unix::ffi::OsStringExt;
+
+use itertools::{Either, Itertools};
+use structopt::StructOpt;
+
+use print_bytes::{eprint_bytes, print_bytes};
+use wslpath::convert::{BulkConversion, Converter, win_to_wsl, wsl_to_win, PathSeparators};
+use wslpath::convert::line_sep::LineSep;
+use wslpath::convert::path_sep::WindowsPathSep;
+use wslpath::util::enum_arg::EnumArg;
 
 #[derive(StructOpt, Debug)]
 enum To {
     Win,
     WSL {
         #[structopt(long)]
-        convert_root_loop: bool,
+        dont_convert_root_loop: bool,
     },
 }
 
@@ -30,99 +28,96 @@ struct Args {
     paths: Vec<OsString>,
     #[structopt(long)]
     from_files: bool,
-    #[structopt(long)]
+    #[structopt(long, possible_values = &WindowsPathSep::str_variants(), case_insensitive = true)]
     path_sep: WindowsPathSep,
-    #[structopt(long)]
+    #[structopt(long, possible_values = &LineSep::str_variants(), case_insensitive = true)]
     read_line_sep: LineSep,
-    #[structopt(long)]
+    #[structopt(long, possible_values = &LineSep::str_variants(), case_insensitive = true)]
     write_line_sep: LineSep,
 }
 
-struct ConvertAndPrint<'a, C: Converter> {
-    converter: C,
-    paths: &'a mut Vec<u8>,
-    input_sep: &'a LineSep,
-    output_sep: &'a LineSep,
-    source_path: &'a Path,
-}
-
-impl<'a, C: Converter> ConvertAndPrint<'a, C> {
-    fn run(&self) {
-        let BulkConversion {
-            paths,
-            errors,
-        } = self.converter.convert_all_flat(
-            self.paths.as_mut_slice(),
-            self.input_sep.sep(),
-            self.output_sep.sep(),
-        );
-        print_bytes(paths);
-        eprint_bytes(self.source_path);
-        eprint!(":{}", self.output_sep.as_str());
-        for error in errors {
-            eprint!("\t{:#?}{}", error, self.output_sep.as_str());
-        }
+fn print_converted<C: Converter>(converted: &BulkConversion<C>, source_path: Option<&Path>, line_sep: &LineSep) {
+    let BulkConversion {
+        paths,
+        remainder_index: _,
+        errors,
+    } = converted;
+    print_bytes(paths);
+    if errors.is_empty() {
+        return;
+    }
+    source_path.map(eprint_bytes);
+    eprint!(":{}", line_sep.value());
+    for error in errors {
+        eprint!("\t{:#?}{}", error, line_sep.value());
     }
 }
 
-fn run<C: Converter>(args: &Args, options: C::Options) -> anyhow::Result<()> {
-    let converter = C::new(options)?;
+fn run<C: Converter>(args: Args, converter: C) {
+    let seps = PathSeparators {
+        input: args.read_line_sep,
+        output: args.write_line_sep,
+    };
     if !args.from_files {
         let mut paths = args.paths
             .into_iter()
             .map(|it| it.into_vec())
             .intersperse(vec![0])
             .flat_map(|it| it.into_iter())
-            .collect();
-        ConvertAndPrint {
-            converter: &converter,
-            paths: &mut paths,
-            input_sep: &LineSep::Null,
-            output_sep: &args.write_line_sep,
-            source_path: "args".into(),
-        }.run();
+            .collect_vec();
+        paths.push(0); // trailing delimiter
+        let converted = converter.convert_all(paths.as_mut_slice(), &seps);
+        print_converted(&converted, Some(Path::new("args")), &args.write_line_sep);
     } else {
         let stdin_path = "/proc/self/fd/0"; // /proc/self/fd/0 is more portable than /dev/stdin
-        let (errors, files) = match args.paths.as_slice() {
-            [] => &[stdin_path.into()],
+        let default_paths = [stdin_path.into()];
+        let (errors, files): (Vec<_>, Vec<_>) = match args.paths.as_slice() {
+            [] => &default_paths,
             paths => paths,
         }.iter()
             .map(Path::new)
-            .map(|path| (path, File::open(path)?))
-            .partition_map::<Vec<io::Error>, Vec<(&Path, File)>>(Either::from);
+            .map(|path| {
+                converter
+                    .convert_file(path, &seps, Default::default())
+                    .map(|it| (path, it))
+            })
+            .partition_map(Either::from);
         if !errors.is_empty() {
-            bail!("io error"); // TODO print all errors
+            for error in errors {
+                eprint!("{:#?}{}", error, args.write_line_sep.value());
+            }
+            return
         }
         for (path, file) in files {
-            // for now, read whole file at once
-            // but for non-file files, I should buffer the conversion
-            let mut paths = fs::read(file)?;
-            ConvertAndPrint {
-                converter: &converter,
-                paths: &mut paths,
-                input_sep: &args.read_line_sep,
-                output_sep: &args.write_line_sep,
-                source_path: path,
-            }.run();
+            for (i, converted) in file.enumerate() {
+                let source_path = Some(path).filter(|_| i == 0);
+                match converted {
+                    Err(e) => eprint!("{:#?}{}", e, args.write_line_sep.value()),
+                    Ok(converted) => print_converted(&converted, source_path, &args.write_line_sep),
+                };
+            }
         }
     }
-    Ok(())
 }
 
 #[paw::main]
 fn main(args: Args) -> anyhow::Result<()> {
     println!("{:#?}", args);
     match args.to {
-        To::WSL { convert_root_loop } => {
-            run(&args, win_to_wsl::Options {
-                convert_root_loop,
+        To::WSL { dont_convert_root_loop } => {
+            use win_to_wsl::{Converter, Options};
+            let options = Options {
+                convert_root_loop: !dont_convert_root_loop,
                 sep: args.path_sep,
-            })?;
+            };
+            run(args, Converter::new(options)?);
         }
         To::Win => {
-            run(&args, wsl_to_win::Options {
+            use wsl_to_win::{Converter, Options};
+            let options = Options {
                 sep: args.path_sep,
-            })?;
+            };
+            run(args, Converter::new(options)?);
         }
     }
     Ok(())

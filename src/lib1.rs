@@ -1,7 +1,7 @@
-use std::path::Path;
+use itertools::Itertools;
 use std::ffi::OsString;
 use std::io;
-use itertools::Itertools;
+use std::path::Path;
 
 fn is_valid_drive(drive: &str) -> bool {
     drive.chars().all(|it| it.is_ascii_alphabetic())

@@ -1,5 +1,6 @@
 use optional::Optioned;
-use crate::convert::{IllegalWindowsFileNameCharError, WindowsFileNameCharType};
+
+use crate::convert::windows_file_name_char::{IllegalWindowsFileNameCharError, WindowsFileNameCharType};
 
 fn check_char(c: u8) -> Result<u8, IllegalWindowsFileNameCharError> {
     use WindowsFileNameCharType::*;

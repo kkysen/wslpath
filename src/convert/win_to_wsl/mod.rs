@@ -1,14 +1,14 @@
+use std::os::unix::ffi::OsStrExt;
+
+use thiserror::Error;
+
+use crate::convert::path_sep::WindowsPathSep;
+use crate::convert::win_to_wsl::init::{ConvertOptionsError, Root};
+pub use crate::convert::win_to_wsl::init::Options;
+use crate::convert::windows_file_name_char::IllegalWindowsFileNameCharError;
+
 mod init;
 mod decode;
-
-use crate::convert::{WindowsPathSep, IllegalWindowsFileNameCharError};
-use std::ffi::{OsString, OsStr};
-use std::path::PathBuf;
-use thiserror::Error;
-use std::os::unix::ffi::OsStringExt;
-use std::os::unix::ffi::OsStrExt;
-pub use crate::convert::win_to_wsl::init::Options;
-use crate::convert::win_to_wsl::init::{Root, ConvertOptionsError};
 
 pub struct Converter {
     options: Options,
@@ -25,8 +25,8 @@ impl WindowsPathSep {
             Slash => {} // already all /,
             BackSlash => {
                 for c in path {
-                    if *c == BackSlash.into() {
-                        *c = Slash.into();
+                    if *c == BackSlash.value() {
+                        *c = Slash.value();
                     }
                 }
             }

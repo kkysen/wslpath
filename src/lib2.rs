@@ -1,4 +1,5 @@
 use std::ffi::{OsStr, OsString};
+
 use crate::PathType::WSL;
 
 pub enum Error {

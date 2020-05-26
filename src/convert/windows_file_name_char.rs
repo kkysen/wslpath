@@ -1,3 +1,5 @@
+use thiserror::Error;
+
 use crate::convert::path_sep::WindowsPathSep;
 
 #[derive(Debug, Eq, PartialEq)]

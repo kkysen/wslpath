@@ -1,14 +1,14 @@
 use std::ffi::OsString;
-use std::path::{PathBuf, Path};
 use std::io;
-use std::process::{Command, Output};
-use crate::convert::WindowsPathSep;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+
 use thiserror::Error;
-use crate::convert::win_to_wsl::Converter;
-use crate::convert::wsl::get_unc_root;
+
 use crate::convert::path_sep::WindowsPathSep;
+use crate::convert::wsl::get_unc_root;
 
 #[derive(Error, Debug)]
 #[error("Windows environment variable lookup failed for {var}")]
