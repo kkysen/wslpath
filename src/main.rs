@@ -50,8 +50,10 @@ fn print_converted<C: Converter>(
     if errors.is_empty() {
         return;
     }
-    source_path.map(eprint_bytes);
-    eprint!(":{}", line_sep.value());
+    if let Some(source_path) = source_path {
+        eprint_bytes(source_path);
+        eprint!(":{}", line_sep.value());
+    }
     for error in errors {
         eprint!("\t{:#?}{}", error, line_sep.value());
     }
