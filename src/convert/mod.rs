@@ -133,7 +133,7 @@ pub trait Converter where Self: Sized {
             None => return empty,
             Some(c) => *c,
         };
-
+        
         // if paths doesn't end in an input_sep,
         // truncate paths from the end until it does end in an input_sep
         // also store the remainder to return
@@ -152,23 +152,21 @@ pub trait Converter where Self: Sized {
         // at most one more allocation
         let mut buf = Vec::with_capacity(paths.len());
         let mut errors = Vec::new();
-        for (index, path) in paths
+        paths
             .split_mut(|c| seps.input.matches(*c))
             .filter(|it| !it.is_empty())
-            .enumerate() {
-            if index % 1000000 == 0 {
-                dbg!(index);
-            }
-            let result = self.convert_into_buf(path, &mut buf);
-            if let Err(source) = result {
-                errors.push(OneConvertError {
-                    index,
-                    path: OsString::from_vec(path.into()),
-                    source,
-                });
-            }
-            seps.output.write_to_buf(&mut buf);
-        }
+            .enumerate()
+            .for_each(|(index, path)| {
+                let result = self.convert_into_buf(path, &mut buf);
+                if let Err(source) = result {
+                    errors.push(OneConvertError {
+                        index,
+                        path: OsString::from_vec(path.into()),
+                        source,
+                    });
+                }
+                seps.output.write_to_buf(&mut buf);
+            });
         let paths = OsString::from_vec(buf);
         BulkConversion {
             paths,
@@ -295,13 +293,10 @@ impl<'a, C, InputSep, OutputSep> Iterator for ConversionIterator<'a, C, InputSep
                     return None;
                 }
                 let paths = self.buf.as_mut_slice();
-                let converted = self.converter.convert_all(paths, self.separators);
+                let mut converted = self.converter.convert_all(paths, self.separators);
                 // remove everything except remainder
                 self.buf.splice(..converted.remainder_index, iter::empty::<u8>());
-                let converted = BulkConversion {
-                    remainder_index: 0,
-                    ..converted
-                };
+                converted.remainder_index = 0;
                 Some(Ok(converted))
             }
         }

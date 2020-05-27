@@ -28,11 +28,11 @@ struct Args {
     paths: Vec<OsString>,
     #[structopt(long)]
     from_files: bool,
-    #[structopt(long, possible_values = &WindowsPathSep::str_variants(), case_insensitive = true)]
+    #[structopt(long, default_value, possible_values = &WindowsPathSep::str_variants(), case_insensitive = true)]
     path_sep: WindowsPathSep,
-    #[structopt(long, possible_values = &LineSep::str_variants(), case_insensitive = true)]
+    #[structopt(long, default_value, possible_values = &LineSep::str_variants(), case_insensitive = true)]
     read_line_sep: LineSep,
-    #[structopt(long, possible_values = &LineSep::str_variants(), case_insensitive = true)]
+    #[structopt(long, default_value, possible_values = &LineSep::str_variants(), case_insensitive = true)]
     write_line_sep: LineSep,
 }
 
@@ -84,11 +84,12 @@ fn run<C: Converter>(args: Args, converter: C) {
                 converter
                     .convert_file(path, &seps, Default::default())
                     .map(|it| (path, it))
+                    .map_err(|it| (path, it))
             })
             .partition_map(Either::from);
         if !errors.is_empty() {
-            for error in errors {
-                eprint!("{:#?}{}", error, args.write_line_sep.value());
+            for (path, error) in errors {
+                eprint!("{:#?}: {:#?}{}", path, error, args.write_line_sep.value());
             }
             return
         }
@@ -96,8 +97,13 @@ fn run<C: Converter>(args: Args, converter: C) {
             for (i, converted) in file.enumerate() {
                 let source_path = Some(path).filter(|_| i == 0);
                 match converted {
-                    Err(e) => eprint!("{:#?}{}", e, args.write_line_sep.value()),
-                    Ok(converted) => print_converted(&converted, source_path, &args.write_line_sep),
+                    Err(e) => {
+                        eprint!("{:#?}: {:#?}{}", path, e, args.write_line_sep.value());
+                        break;
+                    },
+                    Ok(converted) => {
+                        print_converted(&converted, source_path, &args.write_line_sep);
+                    },
                 };
             }
         }
@@ -106,7 +112,7 @@ fn run<C: Converter>(args: Args, converter: C) {
 
 #[paw::main]
 fn main(args: Args) -> anyhow::Result<()> {
-    println!("{:#?}", args);
+    eprintln!("{:#?}", args);
     match args.to {
         To::WSL { dont_convert_root_loop } => {
             use win_to_wsl::{Converter, Options};
