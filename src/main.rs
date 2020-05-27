@@ -1,30 +1,17 @@
 use std::ffi::OsString;
-use std::path::Path;
 use std::os::unix::ffi::OsStringExt;
+use std::path::Path;
 
 use itertools::{Either, Itertools};
 use structopt::StructOpt;
 
 use print_bytes::{eprint_bytes, print_bytes};
-use wslpath::convert::{BulkConversion, Converter, win_to_wsl, wsl_to_win, PathSeparators};
+use wslpath::convert::{BulkConversion, Converter, PathSeparators, win_to_wsl, wsl_to_win};
 use wslpath::convert::line_sep::LineSep;
 use wslpath::convert::path_sep::WindowsPathSep;
 
 #[derive(StructOpt, Debug)]
-enum To {
-    Win,
-    WSL {
-        #[structopt(long)]
-        dont_convert_root_loop: bool,
-    },
-}
-
-#[derive(StructOpt, Debug)]
-struct Args {
-    #[structopt(subcommand)]
-    to: To,
-    #[structopt(parse(from_os_str))]
-    paths: Vec<OsString>,
+struct SharedArgs {
     #[structopt(long)]
     from_files: bool,
     #[structopt(long, default_value)]
@@ -33,9 +20,27 @@ struct Args {
     read_line_sep: LineSep,
     #[structopt(long, default_value)]
     write_line_sep: LineSep,
+    #[structopt(parse(from_os_str))]
+    paths: Vec<OsString>,
 }
 
-fn print_converted<C: Converter>(converted: &BulkConversion<C>, source_path: Option<&Path>, line_sep: &LineSep) {
+#[derive(StructOpt, Debug)]
+enum Args {
+    Win {
+        #[structopt(flatten)]
+        args: SharedArgs,
+    },
+    WSL {
+        #[structopt(flatten)]
+        args: SharedArgs,
+        #[structopt(long)]
+        dont_convert_root_loop: bool,
+    },
+}
+
+fn print_converted<C: Converter>(
+    converted: &BulkConversion<C>, source_path: Option<&Path>, line_sep: &LineSep,
+) {
     let BulkConversion {
         paths,
         remainder_index: _,
@@ -52,7 +57,7 @@ fn print_converted<C: Converter>(converted: &BulkConversion<C>, source_path: Opt
     }
 }
 
-fn run<C: Converter>(args: Args, converter: C) {
+fn run<C: Converter>(args: SharedArgs, converter: C) {
     if !args.from_files {
         let mut paths = args.paths
             .into_iter()
@@ -90,7 +95,7 @@ fn run<C: Converter>(args: Args, converter: C) {
             for (path, error) in errors {
                 eprint!("{:#?}: {:#?}{}", path, error, args.write_line_sep.value());
             }
-            return
+            return;
         }
         for (path, file) in files {
             for (i, converted) in file.enumerate() {
@@ -99,10 +104,10 @@ fn run<C: Converter>(args: Args, converter: C) {
                     Err(e) => {
                         eprint!("{:#?}: {:#?}{}", path, e, args.write_line_sep.value());
                         break;
-                    },
+                    }
                     Ok(converted) => {
                         print_converted(&converted, source_path, &args.write_line_sep);
-                    },
+                    }
                 };
             }
         }
@@ -112,8 +117,9 @@ fn run<C: Converter>(args: Args, converter: C) {
 #[paw::main]
 fn main(args: Args) -> anyhow::Result<()> {
     eprintln!("{:#?}", args);
-    match args.to {
-        To::WSL { dont_convert_root_loop } => {
+    use Args::*;
+    match args {
+        WSL { args, dont_convert_root_loop } => {
             use win_to_wsl::{Converter, Options};
             let options = Options {
                 convert_root_loop: !dont_convert_root_loop,
@@ -121,7 +127,7 @@ fn main(args: Args) -> anyhow::Result<()> {
             };
             run(args, Converter::new(options)?);
         }
-        To::Win => {
+        Win {args} => {
             use wsl_to_win::{Converter, Options};
             let options = Options {
                 sep: args.path_sep,

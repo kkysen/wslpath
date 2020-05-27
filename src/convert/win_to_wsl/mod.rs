@@ -19,18 +19,21 @@ impl WindowsPathSep {
     /// convert path sep to to posix path sep
     /// if we're accepting / as the Windows sep, then do nothing
     /// if we're accepting \ as the Windows sep, need to replace them w/ /
-    fn convert_sep(&self, path: &mut [u8]) {
+    fn convert_sep(&self, path: &mut [u8]) -> Result<(), IllegalWindowsFileNameCharError> {
         use WindowsPathSep::*;
         match self {
             Slash => {} // already all /,
             BackSlash => {
-                for c in path {
+                for (i, c) in path.iter_mut().enumerate() {
                     if *c == BackSlash.value() {
                         *c = Slash.value();
+                    } else if *c == Slash.value() {
+                        return Err((*c, i).into());
                     }
                 }
             }
         }
+        Ok(())
     }
 }
 
@@ -83,7 +86,8 @@ impl Converter {
             _ if path.starts_with(unc_root) => {
                 let path = &path[unc_root.len()..];
                 buf.reserve(path.len());
-                decode::path(path, buf)?;
+                decode::path(path, buf)
+                    .map_err(|e| e.with_base_index(unc_root.len()))?;
             },
             [drive, b':'] => {
                 buf.reserve("/mnt/c".len());
@@ -97,7 +101,8 @@ impl Converter {
                 buf.extend_from_slice(b"/mnt/");
                 buf.push(drive.to_ascii_lowercase());
                 buf.push(b'/');
-                decode::path(path, buf)?;
+                decode::path(path, buf)
+                    .map_err(|e| e.with_base_index(b"C:/".len()))?;
             },
             _ => return Err(ConvertError::Parse),
         };
@@ -119,7 +124,7 @@ impl super::Converter for Converter {
     }
     
     fn convert_into_buf(&self, path: &mut [u8], buf: &mut Vec<u8>) -> Result<(), Self::Error> {
-        self.options.sep.convert_sep(path);
+        self.options.sep.convert_sep(path)?;
         self.raw_convert(path, buf)?;
         Ok(())
     }

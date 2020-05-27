@@ -2,18 +2,18 @@ use optional::Optioned;
 
 use crate::convert::windows_file_name_char::{IllegalWindowsFileNameCharError, WindowsFileNameCharType};
 
-fn check_char(c: u8) -> Result<u8, IllegalWindowsFileNameCharError> {
+fn check_char(c: u8, i: usize) -> Result<u8, IllegalWindowsFileNameCharError> {
     use WindowsFileNameCharType::*;
     let char_type: WindowsFileNameCharType = c.into();
     match char_type {
         Legal | Slash => Ok(c),
-        _ => Err(c.into()),
+        _ => Err((c, i).into()),
     }
 }
 
 fn check_path(path: &[u8]) -> Result<(), IllegalWindowsFileNameCharError> {
-    for c in path {
-        check_char(*c)?;
+    for (i, c) in path.iter().enumerate() {
+        check_char(*c, i)?;
     }
     Ok(())
 }

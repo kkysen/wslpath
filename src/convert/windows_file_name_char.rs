@@ -41,13 +41,25 @@ impl From<&WindowsPathSep> for WindowsFileNameCharType {
 pub struct IllegalWindowsFileNameCharError {
     char: char,
     char_type: WindowsFileNameCharType,
+    index: usize,
 }
 
-impl From<u8> for IllegalWindowsFileNameCharError {
-    fn from(c: u8) -> Self {
+impl From<(u8, usize)> for IllegalWindowsFileNameCharError {
+    fn from(c_i: (u8, usize)) -> Self {
+        let (c, i) = c_i;
         Self {
             char: c as char,
             char_type: c.into(),
+            index: i,
+        }
+    }
+}
+
+impl IllegalWindowsFileNameCharError {
+    pub fn with_base_index(self, i: usize) -> Self {
+        Self {
+            index: self.index + i,
+            ..self
         }
     }
 }
