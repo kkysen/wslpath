@@ -66,7 +66,8 @@ impl Converter {
     /// i.e., the loop from / to windows store root,
     /// by just removing that redundant prefix
     fn fix_root_loop<'a>(&self, path: &'a [u8]) -> &'a [u8] {
-        self.try_fix_root_loop(path)
+        // skip leading / when fixing
+        self.try_fix_root_loop(&path[1..])
             .unwrap_or(path)
     }
     
@@ -88,22 +89,24 @@ impl Converter {
                 buf.reserve(path.len());
                 decode::path(path, buf)
                     .map_err(|e| e.with_base_index(unc_root.len()))?;
-            },
+            }
             [drive, b':'] => {
                 buf.reserve("/mnt/c".len());
                 buf.extend_from_slice(b"/mnt/");
                 buf.push(drive.to_ascii_lowercase());
-            },
-            [drive, b':', b'/', path @ ..] => {
+            }
+            [drive, b':', path @ ..] => {
+                if !path.first().contains(&&b'/') {
+                    return Err(ConvertError::Parse);
+                }
                 let path = self.fix_root_loop(path);
                 let len = path.len() + (b"/mnt/c".len() - b"C:".len());
                 buf.reserve(len);
                 buf.extend_from_slice(b"/mnt/");
                 buf.push(drive.to_ascii_lowercase());
-                buf.push(b'/');
                 decode::path(path, buf)
                     .map_err(|e| e.with_base_index(b"C:/".len()))?;
-            },
+            }
             _ => return Err(ConvertError::Parse),
         };
         Ok(())
