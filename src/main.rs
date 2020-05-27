@@ -9,7 +9,6 @@ use print_bytes::{eprint_bytes, print_bytes};
 use wslpath::convert::{BulkConversion, Converter, win_to_wsl, wsl_to_win, PathSeparators};
 use wslpath::convert::line_sep::LineSep;
 use wslpath::convert::path_sep::WindowsPathSep;
-use wslpath::util::enum_arg::EnumArg;
 
 #[derive(StructOpt, Debug)]
 enum To {
@@ -28,11 +27,11 @@ struct Args {
     paths: Vec<OsString>,
     #[structopt(long)]
     from_files: bool,
-    #[structopt(long, default_value, possible_values = &WindowsPathSep::str_variants(), case_insensitive = true)]
+    #[structopt(long, default_value)]
     path_sep: WindowsPathSep,
-    #[structopt(long, default_value, possible_values = &LineSep::str_variants(), case_insensitive = true)]
+    #[structopt(long, default_value)]
     read_line_sep: LineSep,
-    #[structopt(long, default_value, possible_values = &LineSep::str_variants(), case_insensitive = true)]
+    #[structopt(long, default_value)]
     write_line_sep: LineSep,
 }
 
