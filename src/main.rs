@@ -29,6 +29,8 @@ enum Args {
     Win {
         #[structopt(flatten)]
         args: SharedArgs,
+        #[structopt(long)]
+        dont_canonicalize: bool,
     },
     WSL {
         #[structopt(flatten)]
@@ -124,15 +126,16 @@ fn main(args: Args) -> anyhow::Result<()> {
         WSL { args, dont_convert_root_loop } => {
             use win_to_wsl::{Converter, Options};
             let options = Options {
-                convert_root_loop: !dont_convert_root_loop,
                 sep: args.path_sep,
+                convert_root_loop: !dont_convert_root_loop,
             };
             run(args, Converter::new(options)?);
         }
-        Win {args} => {
+        Win {args, dont_canonicalize} => {
             use wsl_to_win::{Converter, Options};
             let options = Options {
                 sep: args.path_sep,
+                canonicalize: !dont_canonicalize,
             };
             run(args, Converter::new(options)?);
         }

@@ -94,15 +94,15 @@ fn get_windows_store_root() -> Result<PathBuf, WindowsStoreRootLookupError> {
 }
 
 pub struct Options {
-    pub convert_root_loop: bool,
     pub sep: WindowsPathSep,
+    pub convert_root_loop: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
-            convert_root_loop: true,
             sep: WindowsPathSep::default(),
+            convert_root_loop: true,
         }
     }
 }
