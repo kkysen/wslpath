@@ -121,6 +121,13 @@ fn run<C: Converter>(args: SharedArgs, converter: C) {
 
 #[paw::main]
 fn main(args: Args) -> anyhow::Result<()> {
+    for mount in proc_mounts::MountIter::new()? {
+        let mount = mount?;
+        print_bytes(&mount.source);
+        print!(" ");
+        print_bytes(&mount.dest);
+        println!();
+    }
     eprintln!("{:#?}", args);
     use Args::*;
     match args {

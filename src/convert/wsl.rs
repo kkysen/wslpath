@@ -1,8 +1,12 @@
-use std::env;
+use std::{env, io};
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt;
 
 use thiserror::Error;
+use std::path::PathBuf;
+use halfbrown::HashMap;
+use proc_mounts::MountIter;
+use itertools::Itertools;
 
 #[derive(Error, Debug)]
 #[error("not running on WSL")]
@@ -21,4 +25,23 @@ pub fn get_unc_root() -> Result<OsString, NotWslError> {
     path.append(&mut distro);
     let path = OsString::from_vec(path);
     Ok(path)
+}
+
+pub struct DrvFsMountPoint {
+    pub wsl: PathBuf,
+    pub win: PathBuf,
+}
+
+pub fn get_drvfs_mount_points() -> Result<Vec<DrvFsMountPoint>, io::Error> {
+    let mut mounts = Vec::new();
+    for mount in MountIter::new()? {
+        let mount = mount?;
+        if mount.fstype.as_str() == "drvfs" {
+            mounts.push(DrvFsMountPoint {
+                wsl: mount.dest,
+                win: mount.source,
+            })
+        }
+    }
+    Ok(mounts)
 }
