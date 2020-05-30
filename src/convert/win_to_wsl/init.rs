@@ -8,7 +8,7 @@ use std::process::{Command, Output};
 use thiserror::Error;
 
 use crate::convert::path_sep::WindowsPathSep;
-use crate::convert::wsl::get_unc_root;
+use crate::convert::wsl::{get_unc_root, NotWslError};
 
 #[derive(Error, Debug)]
 #[error("Windows environment variable lookup failed for {var}")]
@@ -40,8 +40,8 @@ pub enum WindowsStoreRootLookupError {
 
 #[derive(Error, Debug)]
 pub enum ConvertOptionsError {
-    #[error("not running on WSL")]
-    NotWsl,
+    #[error(transparent)]
+    NotWsl(#[from] NotWslError),
     #[error("WSL root not found in Windows Store packages")]
     WindowsStoreRootLookup(#[from] WindowsStoreRootLookupError),
 }
@@ -115,7 +115,7 @@ pub struct Root {
 impl Root {
     pub fn new(options: &Options) -> Result<Self, ConvertOptionsError> {
         Ok(Self {
-            unc: get_unc_root().ok_or(ConvertOptionsError::NotWsl)?,
+            unc: get_unc_root()?,
             windows_store: match options.convert_root_loop {
                 true => {
                     let path = get_windows_store_root()?

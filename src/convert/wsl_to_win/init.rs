@@ -1,19 +1,15 @@
-use crate::convert::path_sep::WindowsPathSep;
-use crate::convert::wsl::get_unc_root;
+use std::io;
 use std::path::PathBuf;
+
+use thiserror::Error;
+
+use crate::convert::path_sep::WindowsPathSep;
+use crate::convert::wsl::{get_unc_root, NotWslError};
 
 pub struct Options {
     pub sep: WindowsPathSep,
+    pub base_directory: Option<PathBuf>,
     pub canonicalize: bool,
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            sep: WindowsPathSep::default(),
-            canonicalize: true,
-        }
-    }
 }
 
 pub struct Root {
@@ -21,18 +17,41 @@ pub struct Root {
 }
 
 #[derive(Error, Debug)]
+pub enum WslPathError {
+    #[error("not absolute path, but didn't choose to canonicalize it")]
+    NotAbsolute,
+    #[error("failed to canonicalize path")]
+    Canonicalization(#[from] io::Error),
+}
+
+#[derive(Error, Debug)]
 pub enum ConvertOptionsError {
-    #[error("not running on WSL")]
-    NotWsl,
+    #[error(transparent)]
+    NotWsl(#[from] NotWslError),
+    #[error(transparent)]
+    WslPath(#[from] WslPathError),
+}
+
+impl Options {
+    pub fn init(&mut self) -> Result<(), ConvertOptionsError> {
+        if let Some(path) = &self.base_directory {
+            if self.canonicalize {
+                let path = path.canonicalize()
+                    .map_err(WslPathError::Canonicalization)?;
+                self.base_directory = Some(path);
+            } else if !path.is_absolute() {
+                Err(WslPathError::NotAbsolute)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Root {
     pub fn new(_options: &Options) -> Result<Self, ConvertOptionsError> {
         Ok(Self {
             unc: get_unc_root()
-                .map(PathBuf::from)
-                .ok_or(ConvertOptionsError::NotWsl)?,
+                .map(PathBuf::from)?,
         })
     }
 }
-

@@ -9,6 +9,7 @@ use print_bytes::{eprint_bytes, print_bytes};
 use wslpath::convert::{BulkConversion, Converter, PathSeparators, win_to_wsl, wsl_to_win};
 use wslpath::convert::line_sep::LineSep;
 use wslpath::convert::path_sep::WindowsPathSep;
+use std::env;
 
 #[derive(StructOpt, Debug)]
 struct SharedArgs {
@@ -136,6 +137,7 @@ fn main(args: Args) -> anyhow::Result<()> {
             let options = Options {
                 sep: args.path_sep,
                 canonicalize: !dont_canonicalize,
+                base_directory: Some(env::current_dir()?),
             };
             run(args, Converter::new(options)?);
         }
