@@ -31,7 +31,13 @@ pub struct DrvFsMountPoint {
     pub win: PathBuf,
 }
 
-pub fn get_drvfs_mount_points() -> Result<Vec<DrvFsMountPoint>, io::Error> {
+#[derive(Error, Debug)]
+#[error("error reading mount info from /proc/mounts")]
+pub struct MountError {
+    #[from] source: io::Error,
+}
+
+pub fn get_drvfs_mount_points() -> Result<Vec<DrvFsMountPoint>, MountError> {
     let mut mounts = Vec::new();
     for mount in MountIter::new()? {
         let mount = mount?;

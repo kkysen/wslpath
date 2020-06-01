@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::convert::path_sep::WindowsPathSep;
-use crate::convert::wsl::{get_unc_root, NotWslError, DrvFsMountPoint, get_drvfs_mount_points};
+use crate::convert::wsl::{get_unc_root, NotWslError, DrvFsMountPoint, get_drvfs_mount_points, MountError};
 
 pub struct Options {
     pub sep: WindowsPathSep,
@@ -31,8 +31,8 @@ pub enum ConvertOptionsError {
     NotWsl(#[from] NotWslError),
     #[error(transparent)]
     WslPath(#[from] WslPathError),
-    #[error("error reading mount info from /proc/mounts")]
-    Mount(#[from] io::Error),
+    #[error(transparent)]
+    Mount(#[from] MountError),
 }
 
 impl Options {
@@ -55,8 +55,7 @@ impl Root {
         Ok(Self {
             unc: get_unc_root()
                 .map(PathBuf::from)?,
-            mounts: get_drvfs_mount_points()
-                .map_err(ConvertOptionsError::Mount)?,
+            mounts: get_drvfs_mount_points()?,
         })
     }
 }

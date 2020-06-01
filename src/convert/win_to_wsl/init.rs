@@ -8,7 +8,7 @@ use std::process::{Command, Output};
 use thiserror::Error;
 
 use crate::convert::path_sep::WindowsPathSep;
-use crate::convert::wsl::{get_unc_root, NotWslError};
+use crate::convert::wsl::{get_unc_root, NotWslError, DrvFsMountPoint, get_drvfs_mount_points, MountError};
 
 #[derive(Error, Debug)]
 #[error("Windows environment variable lookup failed for {var}")]
@@ -44,6 +44,8 @@ pub enum ConvertOptionsError {
     NotWsl(#[from] NotWslError),
     #[error("WSL root not found in Windows Store packages")]
     WindowsStoreRootLookup(#[from] WindowsStoreRootLookupError),
+    #[error(transparent)]
+    Mount(#[from] MountError),
 }
 
 fn get_windows_env_var(var: &str) -> Result<OsString, WindowsEnvVarError> {
@@ -110,6 +112,7 @@ impl Default for Options {
 pub struct Root {
     pub unc: OsString,
     pub windows_store: Option<PathBuf>,
+    pub mounts: Vec<DrvFsMountPoint>,
 }
 
 impl Root {
@@ -126,6 +129,7 @@ impl Root {
                 }
                 false => None,
             },
+            mounts: get_drvfs_mount_points()?,
         })
     }
 }
