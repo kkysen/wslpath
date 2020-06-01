@@ -1,6 +1,6 @@
 #![feature(option_result_contains)]
 
-#[cfg(not(target_os = "unix"))]
+#[cfg(not(unix))]
 compile_error!("This crate only works on WSL.");
 
 pub mod convert;

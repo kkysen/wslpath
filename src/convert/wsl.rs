@@ -4,7 +4,6 @@ use std::os::unix::ffi::OsStringExt;
 
 use thiserror::Error;
 use std::path::PathBuf;
-use halfbrown::HashMap;
 use proc_mounts::MountIter;
 use itertools::Itertools;
 
